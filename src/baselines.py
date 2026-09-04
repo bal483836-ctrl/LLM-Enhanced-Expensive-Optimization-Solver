@@ -22,7 +22,7 @@ def random_search(evaluator, seed=0):
     return evaluator.best_x, evaluator.best_y
 
 
-def differential_evolution(evaluator, n_pop=12, F=0.6, CR=0.9, seed=0):
+def differential_evolution(evaluator, n_pop=12, F=0.6, CR=0.9, seed=0, verbose=False):
     rng = np.random.default_rng(seed)
     prob = evaluator.problem
     lb, ub = prob.lb, prob.ub
@@ -32,7 +32,9 @@ def differential_evolution(evaluator, n_pop=12, F=0.6, CR=0.9, seed=0):
     fit = np.array([evaluator.evaluate(x) for x in pop if evaluator.can_eval()])
     pop = pop[: len(fit)]
 
+    gen = 0
     while evaluator.can_eval():
+        gen += 1
         mutants = de_rand_1(pop, F, rng)
         for i in range(len(pop)):
             if not evaluator.can_eval():
@@ -42,4 +44,7 @@ def differential_evolution(evaluator, n_pop=12, F=0.6, CR=0.9, seed=0):
             if ft < fit[i]:  # greedy selection
                 pop[i] = trial
                 fit[i] = ft
+        if verbose:
+            print(f"gen {gen:3d} | fes {evaluator.n_fes:3d} | best {evaluator.best_y:.4e} "
+                  f"| pure-EA (no AI)", flush=True)
     return evaluator.best_x, evaluator.best_y

@@ -40,6 +40,7 @@ class LLMEASolver:
         use_scheduler=True,
         single_tier=False,
         fixed_n_final=3,
+        use_funnel=True,
     ):
         self.llm = llm
         self.n_init = n_init
@@ -52,6 +53,10 @@ class LLMEASolver:
         self.use_scheduler = use_scheduler
         self.single_tier = single_tier
         self.fixed_n_final = fixed_n_final
+        # use_funnel=False is the "AI only as scheduler" variant: the two-stage
+        # LLM funnel is switched off and finalists are drawn from the pool
+        # without any model scoring, so the LLM is used only for jump-out.
+        self.use_funnel = use_funnel
         self.surrogate = TwoStageSurrogate(
             llm, n_shortlist=n_shortlist, n_final=fixed_n_final,
             single_tier=single_tier,
@@ -118,9 +123,15 @@ class LLMEASolver:
 
             # ---- Idea 1: two-stage funnel picks the finalists ----
             n_final = min(decision.n_final, evaluator.remaining)
-            finalists_idx, info = self.surrogate.select(
-                pool, ctx_X, ctx_y, n_final=n_final
-            )
+            if self.use_funnel:
+                finalists_idx, info = self.surrogate.select(
+                    pool, ctx_X, ctx_y, n_final=n_final
+                )
+            else:
+                # AI-only-as-scheduler: no model scoring; draw finalists at random
+                k = max(1, min(n_final, len(pool)))
+                finalists_idx = rng.choice(len(pool), k, replace=False)
+                info = {"pool_size": len(pool), "shortlist_size": len(pool), "n_final": k}
 
             # ---- spend real evaluations on the finalists ----
             before = evaluator.best_y

@@ -47,22 +47,25 @@ def make_llm(real, seed):
     return MockLLMClient(seed=seed)
 
 
-def run_one(method, fn, dim, fes, seed, real):
+def run_one(method, fn, dim, fes, seed, real, verbose=False):
     prob = make_problem(fn, dim=dim, seed=seed)
     ev = Evaluator(prob, max_fes=fes)
     cost = {}
+    # print each generation when --real (slow) or --verbose is set
+    show = real or verbose
     if method == "random":
         random_search(ev, seed=seed)
     elif method == "de":
-        differential_evolution(ev, seed=seed)
+        differential_evolution(ev, seed=seed, verbose=show)
     else:
         llm = make_llm(real, seed)
-        # in --real mode print each generation so progress is visible live
-        kwargs = dict(seed=seed, verbose=real)
+        kwargs = dict(seed=seed, verbose=show)
         if method == "llm_ea_single":
-            kwargs["single_tier"] = True
+            kwargs["single_tier"] = True           # Idea-1 ablation: large model only
         elif method == "llm_ea_no_sched":
-            kwargs["use_scheduler"] = False
+            kwargs["use_scheduler"] = False         # only the funnel (small+large models)
+        elif method == "llm_ea_sched_only":
+            kwargs["use_funnel"] = False            # AI only as scheduler (no funnel)
         LLMEASolver(llm, **kwargs).solve(ev)
         cost = llm.cost_summary()
     # pad/truncate curve to exactly `fes` for aligned averaging
@@ -82,7 +85,9 @@ def main():
     ap.add_argument("--problems", default="",
                     help="comma-separated subset, e.g. 'sphere'. Default: all.")
     ap.add_argument("--methods", default="",
-                    help="comma-separated subset, e.g. 'llm_ea_full'. Default: all.")
+                    help="comma-separated subset. Default: all. Extra: llm_ea_sched_only")
+    ap.add_argument("--verbose", action="store_true",
+                    help="print each generation (data change) even in offline mode")
     args = ap.parse_args()
 
     os.makedirs(args.outdir, exist_ok=True)
@@ -104,7 +109,7 @@ def main():
                 done += 1
                 # progress line so --real runs don't look frozen during slow API calls
                 print(f"  [{done}/{total}] running {fn} / {m} / seed {s} ...", flush=True)
-                best, curve, cost = run_one(m, fn, args.dim, args.fes, s, args.real)
+                best, curve, cost = run_one(m, fn, args.dim, args.fes, s, args.real, args.verbose)
                 results[fn][m]["finals"].append(best)
                 results[fn][m]["curves"].append(curve)
                 if cost:

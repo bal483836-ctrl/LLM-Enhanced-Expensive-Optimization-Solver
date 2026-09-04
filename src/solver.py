@@ -134,6 +134,6 @@ class LLMEASolver:
             })
             if self.verbose:
                 print(f"gen {gen:3d} | fes {evaluator.n_fes:3d} | best {evaluator.best_y:.4e} "
-                      f"| final {len(finalists_idx)} | {decision.reason}")
+                      f"| final {len(finalists_idx)} | {decision.reason}", flush=True)
 
         return evaluator.best_x, evaluator.best_y

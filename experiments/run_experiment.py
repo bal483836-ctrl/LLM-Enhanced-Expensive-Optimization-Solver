@@ -57,7 +57,8 @@ def run_one(method, fn, dim, fes, seed, real):
         differential_evolution(ev, seed=seed)
     else:
         llm = make_llm(real, seed)
-        kwargs = dict(seed=seed)
+        # in --real mode print each generation so progress is visible live
+        kwargs = dict(seed=seed, verbose=real)
         if method == "llm_ea_single":
             kwargs["single_tier"] = True
         elif method == "llm_ea_no_sched":
@@ -78,18 +79,31 @@ def main():
     ap.add_argument("--fes", type=int, default=300)
     ap.add_argument("--real", action="store_true", help="use a real LLM API")
     ap.add_argument("--outdir", default="results")
+    ap.add_argument("--problems", default="",
+                    help="comma-separated subset, e.g. 'sphere'. Default: all.")
+    ap.add_argument("--methods", default="",
+                    help="comma-separated subset, e.g. 'llm_ea_full'. Default: all.")
     args = ap.parse_args()
 
     os.makedirs(args.outdir, exist_ok=True)
     seeds = list(range(args.seeds))
 
-    # results[fn][method] = {"finals": [...], "curves": [...], "cost": {...}}
-    results = {fn: {m: {"finals": [], "curves": [], "cost": {}} for m in METHODS}
-               for fn in ALL_PROBLEMS}
+    # allow running a small subset (essential for slow/costly --real demos)
+    problems = [p.strip() for p in args.problems.split(",") if p.strip()] or ALL_PROBLEMS
+    methods = [m.strip() for m in args.methods.split(",") if m.strip()] or METHODS
 
-    for fn in ALL_PROBLEMS:
-        for m in METHODS:
+    # results[fn][method] = {"finals": [...], "curves": [...], "cost": {...}}
+    results = {fn: {m: {"finals": [], "curves": [], "cost": {}} for m in methods}
+               for fn in problems}
+
+    total = len(problems) * len(methods) * len(seeds)
+    done = 0
+    for fn in problems:
+        for m in methods:
             for s in seeds:
+                done += 1
+                # progress line so --real runs don't look frozen during slow API calls
+                print(f"  [{done}/{total}] running {fn} / {m} / seed {s} ...", flush=True)
                 best, curve, cost = run_one(m, fn, args.dim, args.fes, s, args.real)
                 results[fn][m]["finals"].append(best)
                 results[fn][m]["curves"].append(curve)
@@ -112,8 +126,8 @@ def _write_summary(results, args, seeds):
     with open(path, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["problem", "method", "final_mean", "final_std", "n_seeds"])
-        for fn in ALL_PROBLEMS:
-            for m in METHODS:
+        for fn in results:
+            for m in results[fn]:
                 fin = results[fn][m]["finals"]
                 w.writerow([fn, m, f"{np.mean(fin):.6e}", f"{np.std(fin):.6e}", len(seeds)])
 
@@ -125,8 +139,8 @@ def _write_costs(results, args, seeds):
         w = csv.writer(f)
         w.writerow(["problem", "method", "avg_small_scored", "avg_large_scored",
                     "avg_large_calls"])
-        for fn in ALL_PROBLEMS:
-            for m in METHODS:
+        for fn in results:
+            for m in results[fn]:
                 c = results[fn][m]["cost"]
                 if not c:
                     continue
@@ -137,15 +151,15 @@ def _write_costs(results, args, seeds):
 
 
 def _write_curves(results, args):
-    for fn in ALL_PROBLEMS:
+    for fn in results:
         path = os.path.join(args.outdir, f"curves_{fn}.csv")
         with open(path, "w", newline="") as f:
             w = csv.writer(f)
-            w.writerow(["fes"] + METHODS)
-            mean_curves = {m: np.mean(results[fn][m]["curves"], axis=0) for m in METHODS}
+            w.writerow(["fes"] + list(next(iter(results.values())).keys()))
+            mean_curves = {m: np.mean(results[fn][m]["curves"], axis=0) for m in results[fn]}
             T = len(next(iter(mean_curves.values())))
             for t in range(T):
-                w.writerow([t + 1] + [f"{mean_curves[m][t]:.6e}" for m in METHODS])
+                w.writerow([t + 1] + [f"{mean_curves[m][t]:.6e}" for m in results[fn]])
 
 
 def _plot(results, args):
@@ -156,13 +170,14 @@ def _plot(results, args):
     except Exception as e:
         print(f"(skipping plot: {e})")
         return
-    fig, axes = plt.subplots(1, len(ALL_PROBLEMS), figsize=(5 * len(ALL_PROBLEMS), 4))
-    if len(ALL_PROBLEMS) == 1:
+    problems = list(results.keys())
+    fig, axes = plt.subplots(1, len(problems), figsize=(5 * len(problems), 4))
+    if len(problems) == 1:
         axes = [axes]
     colors = {"random": "#888888", "de": "#1f77b4", "llm_ea_full": "#d62728",
               "llm_ea_single": "#2ca02c", "llm_ea_no_sched": "#ff7f0e"}
-    for ax, fn in zip(axes, ALL_PROBLEMS):
-        for m in METHODS:
+    for ax, fn in zip(axes, problems):
+        for m in results[fn]:
             mean = np.mean(results[fn][m]["curves"], axis=0)
             x = np.arange(1, len(mean) + 1)
             ax.plot(x, mean, label=m, color=colors.get(m), lw=1.8)

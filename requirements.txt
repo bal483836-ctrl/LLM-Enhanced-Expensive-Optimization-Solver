@@ -1,0 +1,8 @@
+# Core numerical + plotting stack (only these three are required)
+numpy>=1.24
+scipy>=1.10
+matplotlib>=3.6
+
+# Only needed if you run against a REAL LLM API (--real). The offline
+# mock mode used for the experiments needs nothing beyond numpy.
+requests>=2.28

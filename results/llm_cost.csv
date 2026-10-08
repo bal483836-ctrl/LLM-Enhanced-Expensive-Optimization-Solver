@@ -1,0 +1,10 @@
+problem,method,avg_small_scored,avg_large_scored,avg_large_calls
+sphere,llm_ea_full,5303.6,970.0,97.0
+sphere,llm_ea_single,0.0,5292.8,97.0
+sphere,llm_ea_no_sched,4700.0,940.0,94.0
+rosenbrock,llm_ea_full,5289.2,970.0,97.0
+rosenbrock,llm_ea_single,0.0,5265.2,97.0
+rosenbrock,llm_ea_no_sched,4700.0,940.0,94.0
+rastrigin,llm_ea_full,5037.2,970.0,97.0
+rastrigin,llm_ea_single,0.0,5006.0,97.0
+rastrigin,llm_ea_no_sched,4700.0,940.0,94.0
